@@ -1,12 +1,10 @@
-import Sidebar from "./SideBar"
-
+import Body from "./components/Body"
 
 function App() {
-
-
   return (
     <div>
-  <Sidebar />
+    
+    <Body/>
     </div>
   )
 }
