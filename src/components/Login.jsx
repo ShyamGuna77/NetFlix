@@ -1,67 +1,120 @@
-import { useRef, useState } from "react";
+import { useRef, useState ,useCallback} from "react";
+import { useNavigate } from "react-router-dom";
 import Header from "./Header";
+import { auth } from "../utils/firebase";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  
+} from "firebase/auth";
 import validators from "../utils/validate";
+import { useDispatch } from "react-redux";
+import { addUser } from "../utils/UserSlice";
 
 const Login = () => {
   const [signIn, setSignIn] = useState(true);
-  const email = useRef(null);
-  const password = useRef(null);
-  const firstName = useRef(null);
-  const lastName = useRef(null);
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
+  const firstNameRef = useRef(null);
+  const lastNameRef = useRef(null);
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
 
-  const [emailError, setEmailError] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [firstNameError, setFirstNameError] = useState("");
-  const [lastNameError, setLastNameError] = useState("");
+  const [errors, setErrors] = useState({
+    email: "",
+    password: "",
+    firstName: "",
+    lastName: "",
+    firebase: "",
+  });
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
-    setEmailError("");
-    setPasswordError("");
-    setFirstNameError("");
-    setLastNameError("");
 
-    const emailValue = email.current.value;
-    const passwordValue = password.current.value;
-    const firstNameValue = firstName.current ? firstName.current.value : "";
-    const lastNameValue = lastName.current ? lastName.current.value : "";
+    // Reset errors
+    setErrors({
+      email: "",
+      password: "",
+      firstName: "",
+      lastName: "",
+      firebase: "",
+    });
+
+    // Get values from inputs
+    const emailValue = emailRef.current?.value.trim() || "";
+    const passwordValue = passwordRef.current?.value.trim() || "";
+    const firstNameValue = firstNameRef.current?.value.trim() || "";
+    const lastNameValue = lastNameRef.current?.value.trim() || "";
 
     let isValid = true;
+    let newErrors = {};
 
-    // Validate email
+    // Email validation
     if (!validators.validateEmail(emailValue)) {
-      setEmailError("Invalid email format.");
+      newErrors.email = "Invalid email format.";
       isValid = false;
     }
 
-   
+    // Password validation
     if (!validators.validatePassword(passwordValue)) {
-      setPasswordError(
-        "Password must be at least 8 characters long and include at least one number and one special character."
-      );
+      newErrors.password =
+        "Password must be at least 8 characters long and include at least one number and one special character.";
       isValid = false;
     }
 
-   
+    // If signing up, validate first and last names
     if (!signIn) {
-      if (firstNameValue.trim() === "") {
-        setFirstNameError("First name is required.");
+      if (!firstNameValue) {
+        newErrors.firstName = "First name is required.";
         isValid = false;
       }
-      if (lastNameValue.trim() === "") {
-        setLastNameError("Last name is required.");
+      if (!lastNameValue) {
+        newErrors.lastName = "Last name is required.";
         isValid = false;
       }
     }
 
-    if (isValid) {
-      console.log("Form submitted successfully!");
+    if (!isValid) {
+      setErrors(newErrors);
+      return;
+    }
+
+    try {
+      let userCredential;
+      if (signIn) {
+        // Sign in existing user
+        userCredential = await signInWithEmailAndPassword(
+          auth,
+          emailValue,
+          passwordValue
+        );
+      } else {
+        // Sign up new user
+        userCredential = await createUserWithEmailAndPassword(
+          auth,
+          emailValue,
+          passwordValue
+        );
+
+        // Update profile with first and last name
+        await userCredential.user.updateProfile({
+          displayName: `${firstNameValue} ${lastNameValue}`,
+        });
+      }
+
+      // Dispatch user to Redux store
+      dispatch(addUser(userCredential.user));
+
+      // Navigate to /search after successful login/signup
+      navigate("/search");
+    } catch (error) {
+      setErrors((prev) => ({ ...prev, firebase: error.message }));
     }
   }
 
-  function toggleChange() {
-    setSignIn(!signIn);
-  }
+  const toggleChange = useCallback(() => {
+    setSignIn((prev) => !prev);
+  }, []);
 
   return (
     <div className="relative min-h-screen">
@@ -70,13 +123,13 @@ const Login = () => {
         <img
           className="w-full h-full object-cover brightness-50"
           src="https://assets.nflxext.com/ffe/siteui/vlv3/f268d374-734d-474f-ad13-af5ba87ef9fc/web/IN-en-20250210-TRIFECTA-perspective_92338d5d-6ccd-4b1a-8536-eb2b0240a55e_large.jpg"
-          alt="Background asset"
+          alt="Background"
         />
       </div>
 
       <form
         className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
-                                bg-black/50 p-12 rounded-lg w-104"
+                   bg-black/50 p-12 rounded-lg w-104"
         onSubmit={handleSubmit}
       >
         <h1 className="text-white text-3xl font-bold mb-8">
@@ -86,61 +139,63 @@ const Login = () => {
         {!signIn && (
           <>
             <input
-              ref={firstName}
-              className="w-full bg-gray-700 text-white p-4 my-2 rounded-md 
-                                        focus:outline-none focus:ring-2 focus:ring-red-600"
+              ref={firstNameRef}
+              className="w-full bg-gray-700 text-white p-4 my-2 rounded-md"
               type="text"
               placeholder="First Name"
             />
-            {firstNameError && (
-              <p className="text-red-500 text-sm">{firstNameError}</p>
+            {errors.firstName && (
+              <p className="text-red-500 text-sm">{errors.firstName}</p>
             )}
 
             <input
-              ref={lastName}
-              className="w-full bg-gray-700 text-white p-4 my-2 rounded-md 
-                                        focus:outline-none focus:ring-2 focus:ring-red-600"
+              ref={lastNameRef}
+              className="w-full bg-gray-700 text-white p-4 my-2 rounded-md"
               type="text"
               placeholder="Last Name"
             />
-            {lastNameError && (
-              <p className="text-red-500 text-sm">{lastNameError}</p>
+            {errors.lastName && (
+              <p className="text-red-500 text-sm">{errors.lastName}</p>
             )}
           </>
         )}
 
         <input
-          ref={email}
-          className="w-full bg-gray-700 text-white p-4 my-2 rounded-md 
-                                        focus:outline-none focus:ring-2 focus:ring-red-600"
+          ref={emailRef}
+          className="w-full bg-gray-700 text-white p-4 my-2 rounded-md"
           type="email"
           placeholder="Enter Email"
         />
-        {emailError && <p className="text-red-500 text-sm">{emailError}</p>}
+        {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
 
         <input
-          ref={password}
-          className="w-full bg-gray-700 text-white p-4 my-2 rounded-md 
-                                        focus:outline-none focus:ring-2 focus:ring-red-600"
+          ref={passwordRef}
+          className="w-full bg-gray-700 text-white p-4 my-2 rounded-md"
           type="password"
           placeholder="Enter Password"
         />
-        {passwordError && (
-          <p className="text-red-500 text-sm">{passwordError}</p>
+        {errors.password && (
+          <p className="text-red-500 text-sm">{errors.password}</p>
+        )}
+
+        {errors.firebase && (
+          <p className="text-red-500 text-sm">{errors.firebase}</p>
         )}
 
         <button
           className="w-full bg-red-600 text-white py-2 mt-6 rounded-md 
-                                        hover:bg-red-700 font-bold transition duration-200"
+                     hover:bg-red-700 font-bold transition duration-200"
         >
           {signIn ? "Sign In" : "Sign Up"}
         </button>
+
         <p className="text-white text-center m-4">Or</p>
+
         <button
           type="button"
           onClick={toggleChange}
-          className="w-full bg-[#362F2D] text-white py-2 mt-3 rounded-md 
-                                        hover:bg-red-700 font-bold transition duration-200"
+          className="w-full bg-gray-600 text-white py-2 mt-3 rounded-md 
+                     hover:bg-red-700 font-bold transition duration-200"
         >
           {signIn ? "Sign Up" : "Sign In"}
         </button>
@@ -149,4 +204,4 @@ const Login = () => {
   );
 };
 
-export default Login; 
+export default Login;
